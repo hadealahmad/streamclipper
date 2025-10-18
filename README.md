@@ -4,10 +4,12 @@ AI-powered tool for automatically extracting interesting clips from Arabic video
 
 ## Features
 
-- **Multiple Transcription Backends**: Gemini (cloud), Faster-Whisper (local), OpenAI Whisper (AMD GPU support)
-- **AI-Powered Clip Selection**: Uses LLM to identify interesting segments
-- **CSV Export**: Saves transcriptions in CSV format for easy analysis
-- **Flexible Duration**: Support for both short clips and long-form content
+- **Multiple Transcription Backends**: Gemini (cloud), Faster-Whisper (local with GPU), OpenAI Whisper (AMD GPU support)
+- **AI-Powered Clip Selection**: Uses Gemini or Ollama to identify interesting segments
+- **Direct CSV Output**: AI outputs CSV format directly for efficient processing
+- **Smart Defaults**: Optimized settings for 5-15 minute clips
+- **GPU Acceleration**: Automatic GPU detection with CPU fallback
+- **Modular Design**: Easily customizable prompts and configuration
 - **Arabic Language Support**: Optimized for Arabic (non-formal) content
 
 ## Installation
@@ -57,6 +59,12 @@ AI-powered tool for automatically extracting interesting clips from Arabic video
 python video_clipper.py video.mp4
 ```
 
+The tool now uses smart defaults:
+- **Transcription**: Faster-Whisper with GPU acceleration
+- **Clip Selection**: Gemini AI
+- **Clip Duration**: 5-15 minutes
+- **Output**: CSV transcripts + JSON backup
+
 ### Advanced Usage
 
 ```bash
@@ -64,8 +72,8 @@ python video_clipper.py video.mp4 \
     --output clips \
     --backend gemini \
     --llm-provider gemini \
-    --min-duration 10 \
-    --max-duration 60
+    --min-duration 300 \
+    --max-duration 900
 ```
 
 ### Command Line Options
@@ -74,14 +82,17 @@ python video_clipper.py video.mp4 \
 |--------|-------------|---------|
 | `video` | Path to video file | Required |
 | `-o, --output` | Output directory for clips | `clips` |
-| `-m, --model` | Whisper model size | `medium` |
+| `-m, --model` | Whisper model size | `base` |
 | `--backend` | Transcription backend | `faster-whisper` |
 | `--gpu` | GPU device index | Auto-detect |
+| `--no-gpu` | Force CPU usage | False |
 | `--llm-provider` | LLM provider for clip selection | `gemini` |
+| `--llm` | Ollama model name | `llama3.2` |
 | `--gemini-api-key` | Gemini API key | From .env |
-| `--min-duration` | Minimum clip duration (seconds) | `10` |
-| `--max-duration` | Maximum clip duration (seconds) | `60` |
+| `--min-duration` | Minimum clip duration (seconds) | `300` (5 min) |
+| `--max-duration` | Maximum clip duration (seconds) | `900` (15 min) |
 | `--long-form` | Long-form mode (10-30 min clips) | False |
+| `--transcript-format` | Transcript output format | `csv` |
 | `--skip-transcribe` | Skip transcription | False |
 | `--skip-analysis` | Skip LLM analysis | False |
 
@@ -92,10 +103,11 @@ python video_clipper.py video.mp4 \
 - **Cons**: Requires API key, internet connection
 - **Usage**: `--backend gemini --llm-provider gemini`
 
-#### 2. Faster-Whisper (Local)
-- **Pros**: No API key needed, good performance
-- **Cons**: Requires model download, CPU-only
-- **Usage**: `--backend faster-whisper`
+#### 2. Faster-Whisper (Local with GPU)
+- **Pros**: No API key needed, GPU acceleration, good performance
+- **Cons**: Requires model download
+- **Usage**: `--backend faster-whisper` (GPU auto-detected)
+- **Force CPU**: `--no-gpu`
 
 #### 3. OpenAI Whisper (AMD GPU)
 - **Pros**: GPU acceleration, high accuracy
@@ -116,6 +128,18 @@ python video_clipper.py video.mp4 \
 
 ## Configuration
 
+### Customizing Prompts
+
+Edit `prompts.py` to customize AI behavior:
+- `GEMINI_TRANSCRIPTION_PROMPT`: Transcription instructions
+- `get_clip_selection_prompt()`: Clip selection logic
+
+### Customizing Defaults
+
+Edit `config.py` to change default settings:
+- Model sizes, GPU usage, clip durations
+- Output directories, transcript formats
+
 ### Environment Variables
 
 Create a `.env` file with:
@@ -134,34 +158,44 @@ OLLAMA_MODEL=llama3.2
 | Model | Size | Speed | Accuracy | Use Case |
 |-------|------|-------|----------|----------|
 | `tiny` | 39 MB | Fastest | Lowest | Quick testing |
-| `base` | 74 MB | Fast | Low | Quick processing |
-| `small` | 244 MB | Medium | Medium | Balanced |
-| `medium` | 769 MB | Slow | High | Recommended |
-| `large-v2` | 1550 MB | Slower | Higher | High accuracy |
+| `base` | 74 MB | Fast | Good | **Default** - Balanced |
+| `small` | 244 MB | Medium | Better | Higher accuracy |
+| `medium` | 769 MB | Slow | High | Best quality |
+| `large-v2` | 1550 MB | Slower | Higher | Maximum accuracy |
 | `large-v3` | 1550 MB | Slower | Highest | Best quality |
 
 ## Output Files
 
 The tool creates several output files:
 
-- `{video_name}_transcript.csv` - Transcript in CSV format
+- `{video_name}_transcript.csv` - **Primary transcript** (CSV format)
 - `{video_name}_transcript.json` - Transcript in JSON format (backward compatibility)
 - `{video_name}_clips.json` - Selected clips metadata
 - `{video_name}_clip_01.mp4` - Extracted video clips
 - `{video_name}_clip_01.json` - Individual clip metadata
 
-### CSV Format
+### CSV Format (Default)
 
 The transcript CSV contains:
 - `start_time` - Start time in seconds
 - `end_time` - End time in seconds  
 - `text` - Transcribed text
 
+**Benefits of CSV format:**
+- Easy to edit in spreadsheet applications
+- Direct AI output (no conversion needed)
+- Better performance and reliability
+
 ## Examples
 
-### Short Clips (10-60 seconds)
+### Default Usage (5-15 minutes)
 ```bash
-python video_clipper.py video.mp4 --min-duration 10 --max-duration 60
+python video_clipper.py video.mp4
+```
+
+### Short Clips (1-5 minutes)
+```bash
+python video_clipper.py video.mp4 --min-duration 60 --max-duration 300
 ```
 
 ### Long-form Content (10-30 minutes)
@@ -169,12 +203,17 @@ python video_clipper.py video.mp4 --min-duration 10 --max-duration 60
 python video_clipper.py video.mp4 --long-form
 ```
 
-### Using Local Processing
+### Using Local Processing (No API keys)
 ```bash
 python video_clipper.py video.mp4 \
     --backend faster-whisper \
     --llm-provider ollama \
     --llm llama3.2
+```
+
+### Force CPU Usage
+```bash
+python video_clipper.py video.mp4 --no-gpu
 ```
 
 ### Skip Transcription (Use Existing)
@@ -209,14 +248,33 @@ python video_clipper.py video.mp4 --skip-analysis
 
 ### Performance Tips
 
-- Use `gemini` backend for fastest processing
+- **Default setup** is optimized for most use cases
+- Use `gemini` backend for fastest processing (requires API key)
 - Use `faster-whisper` for local processing without API keys
+- GPU acceleration is enabled by default (use `--no-gpu` to disable)
 - Use `--long-form` for educational/long content
-- Use smaller models for faster processing
+- Use smaller models (`base`, `small`) for faster processing
+
+## Project Structure
+
+```
+streamclipper/
+├── video_clipper.py      # Main script
+├── prompts.py            # AI prompts (user-editable)
+├── config.py             # Configuration defaults
+├── clips/                # Default output directory
+└── README.md             # This file
+```
+
+### Modular Design
+
+- **`prompts.py`**: Customize AI behavior by editing prompts
+- **`config.py`**: Change default settings without touching main code
+- **`video_clipper.py`**: Core functionality and logic
 
 ## Dependencies
 
-- `faster-whisper` - Local transcription
+- `faster-whisper` - Local transcription with GPU support
 - `google-generativeai` - Gemini API
 - `requests` - HTTP requests
 - `tqdm` - Progress bars

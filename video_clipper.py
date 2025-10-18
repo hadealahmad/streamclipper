@@ -22,6 +22,10 @@ except ImportError:
     # python-dotenv not installed, will try to install later
     pass
 
+# Import configuration and prompts
+from config import *
+from prompts import GEMINI_TRANSCRIPTION_PROMPT, get_clip_selection_prompt
+
 
 class DependencyChecker:
     """Check and handle dependencies"""
@@ -141,25 +145,7 @@ class GeminiTranscriber:
         
         print("Processing transcription with Gemini...")
         
-        prompt = """Transcribe this Arabic video with precise timestamps.
-
-For each segment of speech, provide:
-1. Start time in seconds (decimal format)
-2. End time in seconds (decimal format)  
-3. The exact Arabic text spoken
-
-Format your response as a JSON array:
-[
-  {"start": 0.0, "end": 5.2, "text": "النص العربي هنا"},
-  {"start": 5.5, "end": 12.3, "text": "المزيد من النص"},
-  ...
-]
-
-IMPORTANT:
-- Use exact timestamps in seconds (e.g., 125.5 not "2:05")
-- Include ALL spoken content, even if informal or colloquial
-- Each segment should be a natural speech unit (phrase or sentence)
-- Return ONLY the JSON array, no other text"""
+        prompt = GEMINI_TRANSCRIPTION_PROMPT
 
         response = self.model.generate_content([video_file, prompt])
         
@@ -171,10 +157,33 @@ IMPORTANT:
         return transcript_segments
     
     def _parse_gemini_response(self, response_text: str) -> List[Dict]:
-        """Parse Gemini's transcription response"""
-        import re
+        """Parse Gemini's CSV transcription response"""
+        import csv
+        import io
         
-        # Try to extract JSON array from response
+        # Try to parse as CSV first
+        try:
+            csv_reader = csv.DictReader(io.StringIO(response_text.strip()))
+            segments = []
+            
+            for row in csv_reader:
+                if 'start_time' in row and 'end_time' in row and 'text' in row:
+                    try:
+                        segments.append({
+                            'start': float(row['start_time']),
+                            'end': float(row['end_time']),
+                            'text': row['text'].strip()
+                        })
+                    except ValueError:
+                        continue
+            
+            if segments:
+                return segments
+        except Exception as e:
+            print(f"Warning: Could not parse CSV response: {e}")
+        
+        # Fallback: try to parse as JSON (for backward compatibility)
+        import re
         json_match = re.search(r'\[\s*\{.*?\}\s*\]', response_text, re.DOTALL)
         if json_match:
             try:
@@ -195,14 +204,14 @@ IMPORTANT:
             except json.JSONDecodeError as e:
                 print(f"Warning: Could not parse JSON response: {e}")
         
-        # Fallback: try to parse line by line
+        # Final fallback: try to parse line by line
         print("Warning: Using fallback parser for transcription")
         segments = []
         current_time = 0.0
         
         for line in response_text.split('\n'):
             line = line.strip()
-            if line and not line.startswith('{') and not line.startswith('['):
+            if line and not line.startswith('{') and not line.startswith('[') and not line.startswith('start_time'):
                 # Estimate segment duration (about 5 seconds per line)
                 segments.append({
                     'start': current_time,
@@ -217,17 +226,39 @@ IMPORTANT:
 class VideoTranscriber:
     """Transcribe video using Whisper (faster-whisper backend)"""
     
-    def __init__(self, model_size: str = "medium"):
+    def __init__(self, model_size: str = DEFAULT_WHISPER_MODEL, use_gpu: bool = DEFAULT_USE_GPU):
         """
         Initialize transcriber
         Args:
             model_size: Whisper model size (tiny, base, small, medium, large-v2, large-v3)
+            use_gpu: Whether to use GPU for transcription
         """
         from faster_whisper import WhisperModel
         
         print(f"Loading Whisper model ({model_size})...")
-        # Force CPU to avoid CUDA/cuDNN issues
-        self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        
+        # Determine device and compute type
+        if use_gpu:
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    device = "cuda"
+                    compute_type = "float16"
+                    print("Using GPU for transcription")
+                else:
+                    device = "cpu"
+                    compute_type = "int8"
+                    print("GPU not available, using CPU")
+            except ImportError:
+                device = "cpu"
+                compute_type = "int8"
+                print("PyTorch not available, using CPU")
+        else:
+            device = "cpu"
+            compute_type = "int8"
+            print("Using CPU for transcription")
+        
+        self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
         print("Model loaded successfully")
     
     def transcribe(self, video_path: str) -> List[Dict]:
@@ -450,47 +481,7 @@ class ClipSelector:
         # Format transcript for LLM
         transcript_text = self._format_transcript(transcript)
         
-        # Determine prompt based on duration requirements
-        if max_duration >= 300:  # 5+ minutes = long-form content
-            content_type = "long-form video segments"
-            instructions = """Look for:
-- Complete topics or chapters (full discussions, not snippets)
-- Self-contained story arcs or narratives
-- Deep dives into specific subjects
-- Full explanations or tutorials
-- Extended conversations or interviews
-- Complete arguments or debates
-- Thematic sections that form a coherent whole
-
-Each segment should be a COMPLETE, STANDALONE piece of content that covers an entire topic from start to finish.
-DO NOT create short clips - focus on longer, substantial segments (10+ minutes preferred).
-Think "video" not "short" - capture the full context and development of ideas."""
-        else:  # Short-form content
-            content_type = "short clips"
-            instructions = """Look for:
-- Funny moments or jokes
-- Interesting stories or anecdotes
-- Surprising facts or revelations
-- Emotional or impactful moments
-- Complete thoughts or ideas
-- Controversial or debate-worthy statements"""
-        
-        prompt = f"""You are analyzing Arabic video transcript to find interesting {content_type}.
-
-{instructions}
-
-Transcript with timestamps (in seconds):
-{transcript_text}
-
-Respond with ONLY a JSON array of clips in this exact format:
-[
-  {{"start": 10.5, "end": 635.2, "reason": "Complete discussion about [topic] - covers introduction, main points, and conclusion"}},
-  {{"start": 645.0, "end": 1278.5, "reason": "Full story arc about [topic] from beginning to end"}}
-]
-
-IMPORTANT: Each clip must be between {min_duration} and {max_duration} seconds.
-For long-form content, prefer LONGER segments that tell a complete story.
-Return ONLY the JSON array, no other text."""
+        prompt = get_clip_selection_prompt(transcript_text, min_duration, max_duration)
 
         response = self.llm.generate(prompt)
         
@@ -622,20 +613,26 @@ class VideoClipper:
                 print(f"\nError creating clip {i}: {e}")
 
 
-def save_transcript(transcript: List[Dict], output_path: str):
-    """Save transcript to CSV file"""
-    csv_path = output_path.replace('.json', '.csv')
-    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['start_time', 'end_time', 'text'])
-        for segment in transcript:
-            writer.writerow([segment['start'], segment['end'], segment['text']])
-    print(f"Transcript saved to: {csv_path}")
-    
-    # Also save as JSON for backward compatibility
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(transcript, f, ensure_ascii=False, indent=2)
-    print(f"Transcript also saved as JSON: {output_path}")
+def save_transcript(transcript: List[Dict], output_path: str, format_type: str = DEFAULT_TRANSCRIPT_FORMAT):
+    """Save transcript to file (CSV by default)"""
+    if format_type == "csv":
+        csv_path = output_path.replace('.json', '.csv')
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['start_time', 'end_time', 'text'])
+            for segment in transcript:
+                writer.writerow([segment['start'], segment['end'], segment['text']])
+        print(f"Transcript saved to: {csv_path}")
+        
+        # Also save as JSON for backward compatibility
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(transcript, f, ensure_ascii=False, indent=2)
+        print(f"Transcript also saved as JSON: {output_path}")
+    else:
+        # Save as JSON only
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(transcript, f, ensure_ascii=False, indent=2)
+        print(f"Transcript saved to: {output_path}")
 
 
 def main():
@@ -643,26 +640,29 @@ def main():
         description="Automatically extract clips from videos using AI"
     )
     parser.add_argument("video", help="Path to video file")
-    parser.add_argument("-o", "--output", default="clips", help="Output directory for clips")
-    parser.add_argument("-m", "--model", default="medium", 
+    parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT_DIR, help="Output directory for clips")
+    parser.add_argument("-m", "--model", default=DEFAULT_WHISPER_MODEL, 
                        choices=["tiny", "base", "small", "medium", "large-v2", "large-v3"],
                        help="Whisper model size")
-    parser.add_argument("--backend", default="faster-whisper",
+    parser.add_argument("--backend", default=DEFAULT_TRANSCRIPTION_BACKEND,
                        choices=["faster-whisper", "openai-whisper", "gemini"],
                        help="Transcription backend (gemini for cloud-based, no model download)")
     parser.add_argument("--gpu", type=int, default=None,
                        help="GPU device index to use (0, 1, etc). Use -1 for CPU. Omit for auto-detect.")
-    parser.add_argument("--llm-provider", default="gemini", 
+    parser.add_argument("--no-gpu", action="store_true", help="Force CPU usage (disable GPU)")
+    parser.add_argument("--llm-provider", default=DEFAULT_LLM_PROVIDER, 
                        choices=["gemini", "ollama"],
                        help="LLM provider for clip selection")
-    parser.add_argument("--llm", default="llama3.2", help="Ollama model name (if using ollama)")
+    parser.add_argument("--llm", default=DEFAULT_OLLAMA_MODEL, help="Ollama model name (if using ollama)")
     parser.add_argument("--gemini-api-key", default=None,
                        help="Google Gemini API key (default: from .env file)")
-    parser.add_argument("--min-duration", type=float, default=10, help="Minimum clip duration (seconds)")
-    parser.add_argument("--max-duration", type=float, default=60, help="Maximum clip duration (seconds)")
+    parser.add_argument("--min-duration", type=float, default=DEFAULT_MIN_DURATION, help="Minimum clip duration (seconds)")
+    parser.add_argument("--max-duration", type=float, default=DEFAULT_MAX_DURATION, help="Maximum clip duration (seconds)")
     parser.add_argument("--long-form", action="store_true", help="Optimize for long-form videos (10+ min clips). Sets min=600s, max=1800s")
     parser.add_argument("--skip-transcribe", action="store_true", help="Skip transcription (use existing transcript.json)")
     parser.add_argument("--skip-analysis", action="store_true", help="Skip LLM analysis (use existing clips.json)")
+    parser.add_argument("--transcript-format", default=DEFAULT_TRANSCRIPT_FORMAT, choices=["csv", "json"],
+                       help="Transcript output format")
     
     args = parser.parse_args()
     
@@ -674,7 +674,7 @@ def main():
     
     # Load API key from environment if not provided
     if not args.gemini_api_key:
-        args.gemini_api_key = os.getenv('GEMINI_API_KEY')
+        args.gemini_api_key = os.getenv(GEMINI_API_KEY_ENV)
         if not args.gemini_api_key:
             print("\n⚠️  Warning: No Gemini API key found")
             print("Please either:")
@@ -684,6 +684,11 @@ def main():
             if args.llm_provider == "gemini" or args.backend == "gemini":
                 print("\nError: Gemini API key required for selected options")
                 sys.exit(1)
+    
+    # Handle GPU setting
+    use_gpu = DEFAULT_USE_GPU and not args.no_gpu
+    if args.gpu is not None:
+        use_gpu = args.gpu != -1
     
     # Check dependencies
     DependencyChecker.check_and_install_dependencies()
@@ -734,10 +739,10 @@ def main():
         elif args.backend == "openai-whisper":
             transcriber = VideoTranscriberROCm(model_size=args.model, gpu_device=args.gpu)
         else:
-            transcriber = VideoTranscriber(model_size=args.model)
+            transcriber = VideoTranscriber(model_size=args.model, use_gpu=use_gpu)
         
         transcript = transcriber.transcribe(video_path)
-        save_transcript(transcript, str(transcript_path))
+        save_transcript(transcript, str(transcript_path), args.transcript_format)
     
     if not transcript:
         print("Error: No transcript generated")
@@ -753,7 +758,7 @@ def main():
         print(f"Loaded {len(clips)} clip(s)")
     else:
         if args.llm_provider == "gemini":
-            llm = GeminiLLM(api_key=args.gemini_api_key)
+            llm = GeminiLLM(api_key=args.gemini_api_key, model_name=DEFAULT_GEMINI_MODEL)
         else:
             llm = OllamaLLM(model_name=args.llm)
         
