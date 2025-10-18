@@ -4,25 +4,28 @@ Users can edit these prompts to customize the AI behavior
 """
 
 # Transcription prompt for Gemini
-GEMINI_TRANSCRIPTION_PROMPT = """Transcribe this Arabic video with precise timestamps.
+GEMINI_TRANSCRIPTION_PROMPT = """Transcribe this Arabic video with precise timestamps. The content is in informal Arabic (عامية) with occasional English words mixed in.
 
 For each segment of speech, provide:
 1. Start time in seconds (decimal format)
 2. End time in seconds (decimal format)  
-3. The exact Arabic text spoken
+3. The exact text spoken (preserve informal Arabic and any English words)
 
 Format your response as CSV with headers:
 start_time,end_time,text
 0.0,5.2,النص العربي هنا
-5.5,12.3,المزيد من النص
+5.5,12.3,المزيد من النص مع كلمات إنجليزية
 ...
 
 IMPORTANT:
 - Use exact timestamps in seconds (e.g., 125.5 not "2:05")
-- Include ALL spoken content, even if informal or colloquial
+- Transcribe EXACTLY as spoken - informal Arabic (عامية), not formal (فصحى)
+- Preserve English words when they appear in the speech
+- Include ALL spoken content, even if informal, colloquial, or mixed language
 - Each segment should be a natural speech unit (phrase or sentence)
 - Return ONLY the CSV data, no other text
-- Use proper CSV escaping for text containing commas or quotes"""
+- Use proper CSV escaping for text containing commas or quotes
+- Do NOT translate or formalize the language - keep it as spoken"""
 
 # Clip selection prompts
 def get_clip_selection_prompt(transcript_text: str, min_duration: float, max_duration: float) -> str:
@@ -53,7 +56,7 @@ Think "video" not "short" - capture the full context and development of ideas.""
 - Complete thoughts or ideas
 - Controversial or debate-worthy statements"""
     
-    return f"""You are analyzing Arabic video transcript to find interesting {content_type}.
+    return f"""You are analyzing Arabic video transcript (informal Arabic with occasional English words) to find interesting {content_type}.
 
 {instructions}
 
@@ -66,6 +69,9 @@ Respond with ONLY a JSON array of clips in this exact format:
   {{"start": 645.0, "end": 1278.5, "reason": "Full story arc about [topic] from beginning to end"}}
 ]
 
-IMPORTANT: Each clip must be between {min_duration} and {max_duration} seconds.
-For long-form content, prefer LONGER segments that tell a complete story.
-Return ONLY the JSON array, no other text."""
+IMPORTANT: 
+- Each clip must be between {min_duration} and {max_duration} seconds
+- For long-form content, prefer LONGER segments that tell a complete story
+- The content is in informal Arabic (عامية) with some English words - this is normal
+- Focus on the meaning and content quality, not the language formality
+- Return ONLY the JSON array, no other text"""

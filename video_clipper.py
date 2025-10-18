@@ -27,6 +27,57 @@ from config import *
 from prompts import GEMINI_TRANSCRIPTION_PROMPT, get_clip_selection_prompt
 
 
+class AudioConverter:
+    """Convert video files to MP3 for faster Whisper processing"""
+    
+    @staticmethod
+    def video_to_mp3(video_path: str, output_path: str = None) -> str:
+        """
+        Convert video file to MP3 for faster Whisper processing
+        Args:
+            video_path: Path to input video file
+            output_path: Path for output MP3 file (optional)
+        Returns:
+            Path to the created MP3 file
+        """
+        if output_path is None:
+            # Create MP3 file in same directory as video
+            video_path_obj = Path(video_path)
+            output_path = str(video_path_obj.parent / f"{video_path_obj.stem}_audio.mp3")
+        
+        print(f"Converting video to MP3: {video_path} -> {output_path}")
+        
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-vn",  # No video
+            "-acodec", "mp3",
+            "-ab", "128k",  # 128kbps bitrate (good quality, reasonable size)
+            "-ar", "16000",  # 16kHz sample rate (sufficient for speech)
+            "-y",  # Overwrite output
+            output_path
+        ]
+        
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+            print(f"✓ Audio conversion complete: {output_path}")
+            return output_path
+        except subprocess.CalledProcessError as e:
+            print(f"Error converting video to MP3: {e}")
+            print("Falling back to original video file")
+            return video_path
+    
+    @staticmethod
+    def cleanup_temp_audio(audio_path: str):
+        """Clean up temporary audio file"""
+        try:
+            if os.path.exists(audio_path) and "_audio.mp3" in audio_path:
+                os.remove(audio_path)
+                print(f"Cleaned up temporary audio file: {audio_path}")
+        except Exception as e:
+            print(f"Warning: Could not clean up temporary audio file: {e}")
+
+
 class DependencyChecker:
     """Check and handle dependencies"""
     
@@ -226,12 +277,13 @@ class GeminiTranscriber:
 class VideoTranscriber:
     """Transcribe video using Whisper (faster-whisper backend)"""
     
-    def __init__(self, model_size: str = DEFAULT_WHISPER_MODEL, use_gpu: bool = DEFAULT_USE_GPU):
+    def __init__(self, model_size: str = DEFAULT_WHISPER_MODEL, use_gpu: bool = DEFAULT_USE_GPU, convert_to_mp3: bool = DEFAULT_CONVERT_TO_MP3):
         """
         Initialize transcriber
         Args:
             model_size: Whisper model size (tiny, base, small, medium, large-v2, large-v3)
             use_gpu: Whether to use GPU for transcription
+            convert_to_mp3: Whether to convert video to MP3 for faster processing
         """
         from faster_whisper import WhisperModel
         
@@ -291,6 +343,8 @@ class VideoTranscriber:
         if not model_created:
             self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
             print("Model loaded successfully on CPU")
+        
+        self.convert_to_mp3 = convert_to_mp3
     
     def transcribe(self, video_path: str) -> List[Dict]:
         """
@@ -299,12 +353,24 @@ class VideoTranscriber:
         """
         print(f"Transcribing: {video_path}")
         
-        segments, info = self.model.transcribe(
-            video_path,
-            language="ar",  # Arabic
-            vad_filter=True,  # Voice activity detection
-            word_timestamps=True
-        )
+        # Convert to MP3 if enabled
+        audio_path = video_path
+        temp_audio = None
+        if self.convert_to_mp3:
+            audio_path = AudioConverter.video_to_mp3(video_path)
+            temp_audio = audio_path
+        
+        try:
+            segments, info = self.model.transcribe(
+                audio_path,
+                language="ar",  # Arabic
+                vad_filter=True,  # Voice activity detection
+                word_timestamps=True
+            )
+        finally:
+            # Clean up temporary audio file
+            if temp_audio and temp_audio != video_path:
+                AudioConverter.cleanup_temp_audio(temp_audio)
         
         print(f"Detected language: {info.language} (probability: {info.language_probability:.2f})")
         
@@ -324,12 +390,13 @@ class VideoTranscriber:
 class VideoTranscriberROCm:
     """Transcribe video using original Whisper (supports AMD ROCm)"""
     
-    def __init__(self, model_size: str = "medium", gpu_device: Optional[int] = None):
+    def __init__(self, model_size: str = "medium", gpu_device: Optional[int] = None, convert_to_mp3: bool = DEFAULT_CONVERT_TO_MP3):
         """
         Initialize transcriber with PyTorch backend (AMD GPU compatible)
         Args:
             model_size: Whisper model size (tiny, base, small, medium, large, large-v2, large-v3)
             gpu_device: GPU device index (None = auto-detect, -1 = force CPU)
+            convert_to_mp3: Whether to convert video to MP3 for faster processing
         """
         import whisper
         import torch
@@ -362,6 +429,7 @@ class VideoTranscriberROCm:
         
         self.model = whisper.load_model(model_size, device=device)
         self.device = device
+        self.convert_to_mp3 = convert_to_mp3
         print("Model loaded successfully")
     
     def transcribe(self, video_path: str) -> List[Dict]:
@@ -371,12 +439,24 @@ class VideoTranscriberROCm:
         """
         print(f"Transcribing: {video_path}")
         
-        result = self.model.transcribe(
-            video_path,
-            language="ar",  # Arabic
-            word_timestamps=False,  # Use sentence-level timestamps
-            verbose=False
-        )
+        # Convert to MP3 if enabled
+        audio_path = video_path
+        temp_audio = None
+        if self.convert_to_mp3:
+            audio_path = AudioConverter.video_to_mp3(video_path)
+            temp_audio = audio_path
+        
+        try:
+            result = self.model.transcribe(
+                audio_path,
+                language="ar",  # Arabic
+                word_timestamps=False,  # Use sentence-level timestamps
+                verbose=False
+            )
+        finally:
+            # Clean up temporary audio file
+            if temp_audio and temp_audio != video_path:
+                AudioConverter.cleanup_temp_audio(temp_audio)
         
         print(f"Detected language: {result['language']}")
         
@@ -645,25 +725,15 @@ class VideoClipper:
 
 
 def save_transcript(transcript: List[Dict], output_path: str, format_type: str = DEFAULT_TRANSCRIPT_FORMAT):
-    """Save transcript to file (CSV by default)"""
-    if format_type == "csv":
-        csv_path = output_path.replace('.json', '.csv')
-        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['start_time', 'end_time', 'text'])
-            for segment in transcript:
-                writer.writerow([segment['start'], segment['end'], segment['text']])
-        print(f"Transcript saved to: {csv_path}")
-        
-        # Also save as JSON for backward compatibility
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(transcript, f, ensure_ascii=False, indent=2)
-        print(f"Transcript also saved as JSON: {output_path}")
-    else:
-        # Save as JSON only
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(transcript, f, ensure_ascii=False, indent=2)
-        print(f"Transcript saved to: {output_path}")
+    """Save transcript to CSV file only"""
+    # Always save as CSV, ignore format_type parameter
+    csv_path = output_path.replace('.json', '.csv')
+    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['start_time', 'end_time', 'text'])
+        for segment in transcript:
+            writer.writerow([segment['start'], segment['end'], segment['text']])
+    print(f"Transcript saved to: {csv_path}")
 
 
 def main():
@@ -690,10 +760,9 @@ def main():
     parser.add_argument("--min-duration", type=float, default=DEFAULT_MIN_DURATION, help="Minimum clip duration (seconds)")
     parser.add_argument("--max-duration", type=float, default=DEFAULT_MAX_DURATION, help="Maximum clip duration (seconds)")
     parser.add_argument("--long-form", action="store_true", help="Optimize for long-form videos (10+ min clips). Sets min=600s, max=1800s")
-    parser.add_argument("--skip-transcribe", action="store_true", help="Skip transcription (use existing transcript.json)")
+    parser.add_argument("--skip-transcribe", action="store_true", help="Skip transcription (use existing transcript.csv)")
     parser.add_argument("--skip-analysis", action="store_true", help="Skip LLM analysis (use existing clips.json)")
-    parser.add_argument("--transcript-format", default=DEFAULT_TRANSCRIPT_FORMAT, choices=["csv", "json"],
-                       help="Transcript output format")
+    parser.add_argument("--no-mp3", action="store_true", help="Disable MP3 conversion (use original video file for Whisper)")
     
     args = parser.parse_args()
     
@@ -721,6 +790,9 @@ def main():
     if args.gpu is not None:
         use_gpu = args.gpu != -1
     
+    # Handle MP3 conversion setting
+    convert_to_mp3 = DEFAULT_CONVERT_TO_MP3 and not args.no_mp3
+    
     # Check dependencies
     DependencyChecker.check_and_install_dependencies()
     
@@ -734,32 +806,25 @@ def main():
     output_dir = Path(args.output)
     output_dir.mkdir(exist_ok=True)
     
-    transcript_path = output_dir / f"{video_name}_transcript.json"
+    transcript_path = output_dir / f"{video_name}_transcript.csv"
     
     # Step 1: Transcribe video
     if args.skip_transcribe:
-        # Try to load existing transcript
+        # Try to load existing CSV transcript
         if transcript_path.exists():
             print(f"Loading existing transcript: {transcript_path}")
+            transcript = []
             with open(transcript_path, 'r', encoding='utf-8') as f:
-                transcript = json.load(f)
+                reader = csv.DictReader(f)
+                for row in reader:
+                    transcript.append({
+                        'start': float(row['start_time']),
+                        'end': float(row['end_time']),
+                        'text': row['text']
+                    })
         else:
-            # Try to load CSV version
-            csv_path = str(transcript_path).replace('.json', '.csv')
-            if os.path.exists(csv_path):
-                print(f"Loading existing transcript from CSV: {csv_path}")
-                transcript = []
-                with open(csv_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        transcript.append({
-                            'start': float(row['start_time']),
-                            'end': float(row['end_time']),
-                            'text': row['text']
-                        })
-            else:
-                print("No existing transcript found, will transcribe...")
-                transcript = None
+            print("No existing transcript found, will transcribe...")
+            transcript = None
     else:
         transcript = None
     
@@ -768,12 +833,12 @@ def main():
         if args.backend == "gemini":
             transcriber = GeminiTranscriber(api_key=args.gemini_api_key)
         elif args.backend == "openai-whisper":
-            transcriber = VideoTranscriberROCm(model_size=args.model, gpu_device=args.gpu)
+            transcriber = VideoTranscriberROCm(model_size=args.model, gpu_device=args.gpu, convert_to_mp3=convert_to_mp3)
         else:
-            transcriber = VideoTranscriber(model_size=args.model, use_gpu=use_gpu)
+            transcriber = VideoTranscriber(model_size=args.model, use_gpu=use_gpu, convert_to_mp3=convert_to_mp3)
         
         transcript = transcriber.transcribe(video_path)
-        save_transcript(transcript, str(transcript_path), args.transcript_format)
+        save_transcript(transcript, str(transcript_path), "csv")
     
     if not transcript:
         print("Error: No transcript generated")
