@@ -43,8 +43,15 @@ def get_clip_selection_prompt(transcript_text: str, min_duration: float, max_dur
 - Complete arguments or debates
 - Thematic sections that form a coherent whole
 
-Each segment should be a COMPLETE, STANDALONE piece of content that covers an entire topic from start to finish.
-DO NOT create short clips - focus on longer, substantial segments (10+ minutes preferred).
+Each segment should:
+- Start and end with the topic (complete topic coverage)
+- Include necessary context if needed for understanding
+- Focus on a SINGLE topic, regardless of size
+- Ignore strict length requirements if the topic needs more or less time
+- Stay approximately around the assigned duration when possible
+- Be a COMPLETE, STANDALONE piece of content that covers an entire topic from start to finish
+
+DO NOT create short clips - focus on longer, substantial segments that tell complete stories.
 Think "video" not "short" - capture the full context and development of ideas."""
     else:  # Short-form content
         content_type = "short clips"
@@ -65,8 +72,8 @@ Transcript with timestamps (in seconds):
 
 Respond with ONLY a JSON array of clips in this exact format:
 [
-  {{"start": 10.5, "end": 635.2, "reason": "Complete discussion about [topic] - covers introduction, main points, and conclusion"}},
-  {{"start": 645.0, "end": 1278.5, "reason": "Full story arc about [topic] from beginning to end"}}
+  {{"start": 10.5, "end": 635.2, "reason": "مناقشة كاملة حول [الموضوع] - تشمل المقدمة والنقاط الرئيسية والخلاصة"}},
+  {{"start": 645.0, "end": 1278.5, "reason": "قصة كاملة حول [الموضوع] من البداية للنهاية"}}
 ]
 
 IMPORTANT: 
@@ -74,4 +81,5 @@ IMPORTANT:
 - For long-form content, prefer LONGER segments that tell a complete story
 - The content is in informal Arabic (عامية) with some English words - this is normal
 - Focus on the meaning and content quality, not the language formality
+- Write ALL reasons in Arabic (العربية) - do not use English for the reason field
 - Return ONLY the JSON array, no other text"""
