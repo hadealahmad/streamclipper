@@ -243,12 +243,15 @@ class VideoTranscriber:
                 import torch
                 if torch.cuda.is_available():
                     device = "cuda"
+                    # Try different compute types for different GPU types
                     compute_type = "float16"
-                    print("Using GPU for transcription")
+                    print("GPU detected, attempting to use float16")
                 else:
                     device = "cpu"
                     compute_type = "int8"
-                    print("GPU not available, using CPU")
+                    print("GPU not available (PyTorch CPU-only build), using CPU")
+                    print("For AMD GPU support, install PyTorch with ROCm:")
+                    print("  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.6")
             except ImportError:
                 device = "cpu"
                 compute_type = "int8"
@@ -258,8 +261,36 @@ class VideoTranscriber:
             compute_type = "int8"
             print("Using CPU for transcription")
         
-        self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
-        print("Model loaded successfully")
+        # Try to create model with different configurations
+        model_created = False
+        
+        if device == "cuda":
+            # Try float16 first (NVIDIA GPUs)
+            try:
+                self.model = WhisperModel(model_size, device=device, compute_type="float16")
+                print("Model loaded successfully with float16 (NVIDIA GPU)")
+                model_created = True
+            except ValueError as e:
+                if "float16" in str(e):
+                    print("Float16 not supported, trying int8...")
+                else:
+                    raise e
+            
+            # Try int8 if float16 failed (AMD GPUs or older NVIDIA)
+            if not model_created:
+                try:
+                    self.model = WhisperModel(model_size, device=device, compute_type="int8")
+                    print("Model loaded successfully with int8 (AMD GPU or older NVIDIA)")
+                    model_created = True
+                except Exception as e:
+                    print(f"GPU failed, falling back to CPU: {e}")
+                    device = "cpu"
+                    compute_type = "int8"
+        
+        # Fallback to CPU if GPU failed
+        if not model_created:
+            self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+            print("Model loaded successfully on CPU")
     
     def transcribe(self, video_path: str) -> List[Dict]:
         """

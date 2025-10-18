@@ -3,7 +3,7 @@ Default configuration for video clipper
 """
 
 # Default transcription settings
-DEFAULT_TRANSCRIPTION_BACKEND = "faster-whisper"  # "faster-whisper", "openai-whisper", "gemini"
+DEFAULT_TRANSCRIPTION_BACKEND = "openai-whisper"  # "faster-whisper", "openai-whisper", "gemini" (openai-whisper better for AMD)
 DEFAULT_WHISPER_MODEL = "base"  # "tiny", "base", "small", "medium", "large-v2", "large-v3"
 DEFAULT_USE_GPU = True  # Use GPU for local transcription when available
 

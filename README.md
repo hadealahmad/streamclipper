@@ -39,13 +39,19 @@ AI-powered tool for automatically extracting interesting clips from Arabic video
    pip install -r requirements.txt
    ```
 
-4. **Install FFmpeg**:
+4. **For AMD GPU support** (optional):
+   ```bash
+   # Install PyTorch with ROCm support
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.6
+   ```
+
+5. **Install FFmpeg**:
    - **Arch Linux**: `sudo pacman -S ffmpeg`
    - **Ubuntu/Debian**: `sudo apt install ffmpeg`
    - **macOS**: `brew install ffmpeg`
    - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
 
-5. **Configure environment**:
+6. **Configure environment**:
    ```bash
    cp .env.example .env
    # Edit .env and add your API keys
@@ -60,7 +66,7 @@ python video_clipper.py video.mp4
 ```
 
 The tool now uses smart defaults:
-- **Transcription**: Faster-Whisper with GPU acceleration
+- **Transcription**: OpenAI Whisper with GPU acceleration (better AMD support)
 - **Clip Selection**: Gemini AI
 - **Clip Duration**: 5-15 minutes
 - **Output**: CSV transcripts + JSON backup
@@ -83,7 +89,7 @@ python video_clipper.py video.mp4 \
 | `video` | Path to video file | Required |
 | `-o, --output` | Output directory for clips | `clips` |
 | `-m, --model` | Whisper model size | `base` |
-| `--backend` | Transcription backend | `faster-whisper` |
+| `--backend` | Transcription backend | `openai-whisper` |
 | `--gpu` | GPU device index | Auto-detect |
 | `--no-gpu` | Force CPU usage | False |
 | `--llm-provider` | LLM provider for clip selection | `gemini` |
@@ -107,6 +113,7 @@ python video_clipper.py video.mp4 \
 - **Pros**: No API key needed, GPU acceleration, good performance
 - **Cons**: Requires model download
 - **Usage**: `--backend faster-whisper` (GPU auto-detected)
+- **GPU Support**: NVIDIA (CUDA) and AMD (ROCm) GPUs
 - **Force CPU**: `--no-gpu`
 
 #### 3. OpenAI Whisper (AMD GPU)
@@ -235,7 +242,9 @@ python video_clipper.py video.mp4 --skip-analysis
    - Test with: `ffmpeg -version`
 
 2. **CUDA/GPU issues**:
-   - Use `--gpu -1` to force CPU
+   - Use `--no-gpu` to force CPU
+   - GPU automatically falls back to int8 if float16 not supported
+   - AMD GPUs use ROCm and automatically use int8 precision
    - Check GPU drivers and PyTorch installation
 
 3. **API key errors**:
