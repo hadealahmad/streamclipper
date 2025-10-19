@@ -453,16 +453,19 @@ python video_clipper.py video.mp4 --backend faster-whisper
 - Fast processing
 - No GPU required
 - High accuracy
+- Automatic MP3 conversion for faster uploads
 
 **Disadvantages:**
 - Requires API key and internet
 - API usage costs
-- Upload time for large videos
+- Upload time (reduced with MP3 conversion)
 
 **Usage:**
 ```bash
 python video_clipper.py video.mp4 --backend gemini
 ```
+
+**Note:** Gemini backend automatically converts videos to MP3 before upload to reduce file size and upload time. Gemini supports various audio formats including MP3, WAV, AAC, OGG, and FLAC.
 
 ### LLM Providers for Clip Selection
 

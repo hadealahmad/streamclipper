@@ -4,7 +4,7 @@ Optimized for AMD GPU systems with OpenAI Whisper
 """
 
 # Default transcription settings
-DEFAULT_TRANSCRIPTION_BACKEND = "openai-whisper"  # Primary: openai-whisper (AMD ROCm support)
+DEFAULT_TRANSCRIPTION_BACKEND = "gemini"  # Primary: openai-whisper (AMD ROCm support)
 DEFAULT_WHISPER_MODEL = "medium"  # "tiny", "base", "small", "medium", "large", "large-v2", "large-v3"
 DEFAULT_USE_GPU = True  # Use GPU for local transcription when available
 DEFAULT_GPU_DEVICE = None  # None = auto-detect, 0/1/etc = specific GPU, -1 = force CPU
@@ -12,7 +12,7 @@ DEFAULT_CONVERT_TO_MP3 = True  # Convert video to MP3 for faster Whisper process
 
 # Default LLM settings for clip selection
 DEFAULT_LLM_PROVIDER = "gemini"  # Primary: "gemini" (cloud AI), "ollama" (local)
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash-exp"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_OLLAMA_MODEL = "llama3.2"
 
 # Default clip settings

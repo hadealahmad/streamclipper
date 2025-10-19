@@ -271,15 +271,14 @@ class GeminiTranscriber:
             api_key: Google AI API key
         """
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError:
-            print("\n❌ google-generativeai package not installed")
+            print("\n❌ google-genai package not installed")
             print("Installing now...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generativeai"])
-            import google.generativeai as genai
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "google-genai"])
+            from google import genai
         
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        self.client = genai.Client(api_key=api_key)
         print("✓ Gemini transcriber initialized")
     
     def transcribe(self, video_path: str) -> List[Dict]:
@@ -287,20 +286,31 @@ class GeminiTranscriber:
         Transcribe video with timestamps using Gemini
         Returns list of segments with text, start, and end times
         """
-        import google.generativeai as genai
+        print(f"Converting video to MP3 for faster upload...")
         
-        print(f"Uploading video to Gemini: {video_path}")
-        print("This may take a few minutes depending on video size...")
+        # Convert video to MP3 first to reduce upload size
+        audio_path = AudioConverter.video_to_mp3(video_path)
         
-        video_file = genai.upload_file(path=video_path)
+        print(f"Uploading audio to Gemini: {audio_path}")
+        print("This may take a few minutes depending on audio size...")
+        
+        # Upload the audio file using the new API
+        audio_file = self.client.files.upload(file=audio_path)
         
         print("Processing transcription with Gemini...")
         
-        response = self.model.generate_content([video_file, GEMINI_TRANSCRIPTION_PROMPT])
+        # Generate content using the new API
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[GEMINI_TRANSCRIPTION_PROMPT, audio_file]
+        )
         
         transcript_segments = self._parse_gemini_response(response.text)
         
         print(f"✓ Transcription complete: {len(transcript_segments)} segments")
+        
+        # Keep the MP3 file for potential reuse (don't clean up automatically)
+        print(f"Audio file kept for reuse: {audio_path}")
         
         return transcript_segments
     
@@ -528,7 +538,7 @@ class FasterWhisperTranscriber:
 class GeminiLLM:
     """Interface with Google Gemini API for clip selection"""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
         """
         Initialize Gemini client
         Args:
@@ -536,22 +546,24 @@ class GeminiLLM:
             model_name: Name of the Gemini model to use
         """
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError:
-            print("\n❌ google-generativeai package not installed")
+            print("\n❌ google-genai package not installed")
             print("Installing now...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generativeai"])
-            import google.generativeai as genai
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "google-genai"])
+            from google import genai
         
         self.model_name = model_name
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
         print(f"✓ Gemini API initialized ({model_name})")
     
     def generate(self, prompt: str) -> str:
         """Generate response from LLM"""
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[prompt]
+            )
             return response.text
         except Exception as e:
             print(f"Error calling Gemini API: {e}")
@@ -959,8 +971,8 @@ def main():
                 interactive_gpu=args.interactive_gpu
             )
         
-        if use_existing_audio:
-            # Use existing audio file directly
+        if use_existing_audio and args.backend != "gemini":
+            # Use existing audio file directly (except for Gemini which handles conversion internally)
             transcript = transcriber.transcribe(str(audio_path))
         else:
             transcript = transcriber.transcribe(video_path)
