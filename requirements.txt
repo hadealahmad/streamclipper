@@ -1,6 +1,21 @@
-faster-whisper>=1.0.0
+# Core Dependencies
+python-dotenv==1.0.0
 requests>=2.31.0
 tqdm>=4.66.0
-google-generativeai>=0.8.0
-python-dotenv>=1.0.0
 
+# AI and ML
+google-generativeai>=0.8.0
+openai-whisper==20231117
+
+# Optional: For faster-whisper backend (not primary)
+faster-whisper>=1.0.0
+
+# GPU Support (AMD ROCm)
+# Install PyTorch with ROCm support separately:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.4
+# 
+# For NVIDIA CUDA:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Note: PyTorch must be installed before openai-whisper for GPU support
+# See README.md for detailed installation instructions
