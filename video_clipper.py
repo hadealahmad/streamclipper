@@ -292,18 +292,59 @@ class GeminiTranscriber:
         audio_path = AudioConverter.video_to_mp3(video_path)
         
         print(f"Uploading audio to Gemini: {audio_path}")
+        
+        # Check file size
+        import os
+        file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+        print(f"Audio file size: {file_size_mb:.2f} MB")
         print("This may take a few minutes depending on audio size...")
         
         # Upload the audio file using the new API
-        audio_file = self.client.files.upload(file=audio_path)
+        try:
+            audio_file = self.client.files.upload(file=audio_path)
+            print(f"✓ Upload successful. File URI: {audio_file.uri if hasattr(audio_file, 'uri') else 'N/A'}")
+            print(f"  File name: {audio_file.name if hasattr(audio_file, 'name') else 'N/A'}")
+            print(f"  File state: {audio_file.state if hasattr(audio_file, 'state') else 'N/A'}")
+        except Exception as e:
+            print(f"Error uploading file to Gemini: {e}")
+            return []
         
         print("Processing transcription with Gemini...")
         
         # Generate content using the new API
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[GEMINI_TRANSCRIPTION_PROMPT, audio_file]
-        )
+        try:
+            response = self.client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[GEMINI_TRANSCRIPTION_PROMPT, audio_file]
+            )
+        except Exception as e:
+            print(f"Error calling Gemini API: {e}")
+            return []
+        
+        # Debug: Print response details
+        print(f"Response received. Type: {type(response)}")
+        if hasattr(response, 'text'):
+            print(f"Response text length: {len(response.text) if response.text else 0}")
+            if response.text:
+                print(f"Response preview: {response.text[:200]}...")
+        
+        # Check for safety blocks
+        if hasattr(response, 'candidates') and response.candidates:
+            for candidate in response.candidates:
+                if hasattr(candidate, 'finish_reason'):
+                    print(f"Finish reason: {candidate.finish_reason}")
+                if hasattr(candidate, 'safety_ratings'):
+                    print(f"Safety ratings: {candidate.safety_ratings}")
+        
+        # Check if response is valid
+        if not response or not response.text:
+            print("Error: Gemini returned empty or blocked response")
+            print("This could be due to:")
+            print("  - Content safety filters")
+            print("  - API quota exceeded")
+            print("  - Network issues")
+            print("  - Audio format not supported")
+            return []
         
         transcript_segments = self._parse_gemini_response(response.text)
         
@@ -318,6 +359,11 @@ class GeminiTranscriber:
         """Parse Gemini's CSV transcription response"""
         import csv
         import io
+        
+        # Validate input
+        if not response_text or not isinstance(response_text, str):
+            print(f"Warning: Invalid response_text type: {type(response_text)}")
+            return []
         
         # Try to parse as CSV
         try:
@@ -776,8 +822,9 @@ class VideoClipper:
 
 def save_transcript(transcript: List[Dict], output_path: str, format_type: str = "csv"):
     """Save transcript to CSV and plain text files"""
-    csv_path = output_path.replace('.json', '.csv')
-    txt_path = output_path.replace('.json', '.txt')
+    # output_path is expected to be a .csv file path
+    csv_path = str(output_path)
+    txt_path = str(output_path).replace('.csv', '.txt')
     
     # Save CSV with timestamps
     with open(csv_path, 'w', encoding='utf-8', newline='') as f:
