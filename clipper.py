@@ -23,7 +23,7 @@ except ImportError:
     pass
 
 # Import prompts
-from prompts import GEMINI_TRANSCRIPTION_PROMPT, get_clip_selection_prompt
+from prompts import GEMINI_TRANSCRIPTION_PROMPT, get_clip_selection_prompt, get_timestamp_generation_prompt, get_clip_title_generation_prompt
 
 
 # ============================================================
@@ -805,6 +805,152 @@ class ClipSelector:
         return []
 
 
+class TimestampGenerator:
+    """Generate video section timestamps with Arabic titles"""
+    
+    def __init__(self, llm):
+        """
+        Initialize timestamp generator
+        Args:
+            llm: LLM instance (GeminiLLM or OllamaLLM)
+        """
+        self.llm = llm
+    
+    def generate_timestamps(self, transcript: List[Dict], video_duration: float) -> List[Dict]:
+        """
+        Generate video section timestamps
+        Returns list of timestamp sections with Arabic titles
+        """
+        print("\nGenerating video section timestamps...")
+        
+        transcript_text = self._format_transcript(transcript)
+        prompt = get_timestamp_generation_prompt(transcript_text, video_duration)
+        response = self.llm.generate(prompt)
+        timestamps = self._extract_timestamps_from_response(response, video_duration)
+        
+        print(f"Generated {len(timestamps)} timestamp sections")
+        return timestamps
+    
+    def _format_transcript(self, transcript: List[Dict]) -> str:
+        """Format transcript with timestamps for timestamp generation"""
+        lines = []
+        for seg in transcript:
+            lines.append(f"[{seg['start']:.1f}s - {seg['end']:.1f}s] {seg['text']}")
+        return "\n".join(lines)
+    
+    def _extract_timestamps_from_response(self, response: str, video_duration: float) -> List[Dict]:
+        """Extract and validate timestamps from LLM response"""
+        import re
+        
+        json_match = re.search(r'\[\s*\{.*?\}\s*\]', response, re.DOTALL)
+        if json_match:
+            try:
+                timestamps = json.loads(json_match.group())
+                valid_timestamps = []
+                
+                for timestamp in timestamps:
+                    if not all(key in timestamp for key in ['section', 'start_time', 'end_time', 'arabic_title']):
+                        continue
+                    
+                    start_time = float(timestamp['start_time'])
+                    end_time = float(timestamp['end_time'])
+                    section = int(timestamp['section'])
+                    arabic_title = str(timestamp['arabic_title']).strip()
+                    
+                    if (start_time >= 0 and end_time <= video_duration and 
+                        start_time < end_time and arabic_title):
+                        valid_timestamps.append({
+                            'section': section,
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'arabic_title': arabic_title
+                        })
+                
+                # Sort by section number and validate continuity
+                valid_timestamps.sort(key=lambda x: x['section'])
+                
+                # Validate that sections are continuous and cover the full video
+                if valid_timestamps:
+                    if valid_timestamps[0]['start_time'] != 0.0:
+                        print("Warning: First section doesn't start at 0.0")
+                    
+                    if abs(valid_timestamps[-1]['end_time'] - video_duration) > 1.0:
+                        print(f"Warning: Last section doesn't end at video duration ({video_duration:.1f})")
+                    
+                    # Check for gaps or overlaps
+                    for i in range(len(valid_timestamps) - 1):
+                        current_end = valid_timestamps[i]['end_time']
+                        next_start = valid_timestamps[i + 1]['start_time']
+                        if abs(current_end - next_start) > 0.1:  # Allow small gaps
+                            print(f"Warning: Gap between sections {i+1} and {i+2}")
+                
+                return valid_timestamps
+            except json.JSONDecodeError:
+                pass
+        
+        print("Warning: Could not parse timestamp response properly")
+        return []
+
+
+class ClipTitleGenerator:
+    """Generate suggested titles for video clips"""
+    
+    def __init__(self, llm):
+        """
+        Initialize clip title generator
+        Args:
+            llm: LLM instance (GeminiLLM or OllamaLLM)
+        """
+        self.llm = llm
+    
+    def generate_titles(self, clip: Dict, transcript: List[Dict]) -> Dict[str, str]:
+        """
+        Generate suggested titles for a clip
+        Returns dict with 'arabic' and 'english' titles
+        """
+        # Extract clip content from transcript
+        clip_content = self._extract_clip_content(clip, transcript)
+        clip_duration = clip['end'] - clip['start']
+        
+        prompt = get_clip_title_generation_prompt(clip_content, clip['reason'], clip_duration)
+        response = self.llm.generate(prompt)
+        titles = self._extract_titles_from_response(response)
+        
+        return titles
+    
+    def _extract_clip_content(self, clip: Dict, transcript: List[Dict]) -> str:
+        """Extract text content for a specific clip from transcript"""
+        content_segments = []
+        for segment in transcript:
+            # Check if segment overlaps with clip
+            if (segment['start'] < clip['end'] and segment['end'] > clip['start']):
+                content_segments.append(segment['text'])
+        
+        return ' '.join(content_segments)
+    
+    def _extract_titles_from_response(self, response: str) -> Dict[str, str]:
+        """Extract titles from LLM response"""
+        import re
+        
+        json_match = re.search(r'\{.*?\}', response, re.DOTALL)
+        if json_match:
+            try:
+                titles = json.loads(json_match.group())
+                if 'arabic' in titles and 'english' in titles:
+                    return {
+                        'arabic': str(titles['arabic']).strip(),
+                        'english': str(titles['english']).strip()
+                    }
+            except json.JSONDecodeError:
+                pass
+        
+        print("Warning: Could not parse title response properly")
+        return {
+            'arabic': 'عنوان مقترح',
+            'english': 'Suggested Title'
+        }
+
+
 class VideoClipper:
     """Extract clips from video using ffmpeg"""
     
@@ -866,15 +1012,21 @@ class VideoClipper:
                 
                 # Save metadata
                 metadata_file = output_path / f"{video_name}_clip_{i:02d}.json"
+                metadata = {
+                    'clip_number': i,
+                    'start': clip['start'],
+                    'end': clip['end'],
+                    'duration': clip['end'] - clip['start'],
+                    'reason': clip['reason'],
+                    'source_video': video_path
+                }
+                
+                # Add suggested titles if available
+                if 'suggested_titles' in clip:
+                    metadata['suggested_titles'] = clip['suggested_titles']
+                
                 with open(metadata_file, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        'clip_number': i,
-                        'start': clip['start'],
-                        'end': clip['end'],
-                        'duration': clip['end'] - clip['start'],
-                        'reason': clip['reason'],
-                        'source_video': video_path
-                    }, f, ensure_ascii=False, indent=2)
+                    json.dump(metadata, f, ensure_ascii=False, indent=2)
                 
             except subprocess.CalledProcessError as e:
                 print(f"\nError creating clip {i}: {e}")
@@ -899,6 +1051,24 @@ def save_transcript(transcript: List[Dict], output_path: str, format_type: str =
         for segment in transcript:
             f.write(segment['text'] + '\n')
     print(f"Plain text transcript saved to: {txt_path}")
+
+
+def save_timestamps_youtube_format(timestamps: List[Dict], output_path: str):
+    """Save timestamps in YouTube description format"""
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for timestamp in timestamps:
+            # Convert seconds to HH:MM:SS format
+            start_time_seconds = int(timestamp['start_time'])
+            hours = start_time_seconds // 3600
+            minutes = (start_time_seconds % 3600) // 60
+            seconds = start_time_seconds % 60
+            
+            time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            title = timestamp['arabic_title']
+            
+            f.write(f"{time_str} - {title}\n")
+    
+    print(f"YouTube format timestamps saved to: {output_path}")
 
 
 def main():
@@ -952,6 +1122,12 @@ def main():
     parser.add_argument("--force-redo", action="store_true",
                        help="Force redo all steps even if files exist")
     
+    # Timestamp generation flags
+    parser.add_argument("--create-timestamps", action="store_true",
+                       help="Generate timestamps for existing transcript (skip other steps)")
+    parser.add_argument("--skip-timestamps", action="store_true",
+                       help="Skip timestamp generation")
+    
     args = parser.parse_args()
     
     # Apply long-form preset
@@ -982,6 +1158,12 @@ def main():
         print("Extract-only mode: Extracting clips from existing analysis")
         args.skip_transcribe = True
         args.skip_analysis = True
+    
+    if args.create_timestamps:
+        print("Create-timestamps mode: Generating timestamps for existing transcript")
+        args.skip_transcribe = True
+        args.skip_analysis = True
+        args.extract_only = True
     
     # Load API key
     if not args.gemini_api_key:
@@ -1015,6 +1197,7 @@ def main():
     transcript_path = output_dir / f"{video_name}_transcript.csv"
     audio_path = output_dir / f"{video_name}_audio.mp3"
     clips_json_path = output_dir / f"{video_name}_clips.json"
+    timestamps_txt_path = output_dir / f"{video_name}_timestamps.txt"
     
     # Check for existing files and prompt user
     existing_files = []
@@ -1024,6 +1207,8 @@ def main():
         existing_files.append(f"Transcript: {transcript_path}")
     if clips_json_path.exists():
         existing_files.append(f"Clips analysis: {clips_json_path}")
+    if timestamps_txt_path.exists():
+        existing_files.append(f"Timestamps: {timestamps_txt_path}")
     
     if existing_files and not args.force_redo:
         print("\n=== Existing Files Found ===")
@@ -1099,6 +1284,72 @@ def main():
         print("\n✓ Transcription complete. Use --analyze-only to continue.")
         return
     
+    # Step 1.5: Generate timestamps (if not skipped and not in create-timestamps mode)
+    if not args.skip_timestamps and not args.create_timestamps:
+        if timestamps_txt_path.exists() and not args.force_redo:
+            print(f"Loading existing timestamps: {timestamps_txt_path}")
+            # For existing files, we'll still generate the internal format for display
+            timestamps = []
+        else:
+            # Get video duration for timestamp generation
+            video_duration = VideoClipper.get_video_duration(video_path)
+            
+            # Initialize LLM for timestamp generation
+            if args.llm_provider == "gemini":
+                llm = GeminiLLM(api_key=args.gemini_api_key, model_name=DEFAULT_GEMINI_MODEL)
+            else:
+                llm = OllamaLLM(model_name=args.llm)
+            
+            timestamp_generator = TimestampGenerator(llm)
+            timestamps = timestamp_generator.generate_timestamps(transcript, video_duration)
+            
+            if timestamps:
+                save_timestamps_youtube_format(timestamps, str(timestamps_txt_path))
+            else:
+                print("Warning: No timestamps generated")
+                timestamps = []
+    
+    # Handle create-timestamps mode
+    if args.create_timestamps:
+        if not transcript_path.exists():
+            print("Error: Transcript file not found. Run transcription first.")
+            sys.exit(1)
+        
+        # Get video duration for timestamp generation
+        video_duration = VideoClipper.get_video_duration(video_path)
+        
+        # Initialize LLM for timestamp generation
+        if args.llm_provider == "gemini":
+            llm = GeminiLLM(api_key=args.gemini_api_key, model_name=DEFAULT_GEMINI_MODEL)
+        else:
+            llm = OllamaLLM(model_name=args.llm)
+        
+        timestamp_generator = TimestampGenerator(llm)
+        timestamps = timestamp_generator.generate_timestamps(transcript, video_duration)
+        
+        if timestamps:
+            save_timestamps_youtube_format(timestamps, str(timestamps_txt_path))
+            
+            # Display timestamps
+            print("\n=== Generated Timestamps ===")
+            for timestamp in timestamps:
+                duration = timestamp['end_time'] - timestamp['start_time']
+                start_time_seconds = int(timestamp['start_time'])
+                hours = start_time_seconds // 3600
+                minutes = (start_time_seconds % 3600) // 60
+                seconds = start_time_seconds % 60
+                time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                
+                print(f"\nSection {timestamp['section']}:")
+                print(f"  Time: {time_str} - {timestamp['arabic_title']}")
+                print(f"  Duration: {duration:.1f}s")
+        else:
+            print("Error: No timestamps generated")
+            sys.exit(1)
+        
+        print("\n✓ Timestamp generation complete.")
+        return
+    
     # Step 2: Analyze and select clips
     if args.skip_analysis and clips_json_path.exists():
         print(f"Loading existing clip selections: {clips_json_path}")
@@ -1118,9 +1369,18 @@ def main():
             print("No clips found. Try different parameters.")
             sys.exit(0)
         
+        # Generate suggested titles for each clip
+        print("\nGenerating suggested titles for clips...")
+        title_generator = ClipTitleGenerator(llm)
+        
+        for i, clip in enumerate(clips):
+            print(f"Generating titles for clip {i+1}/{len(clips)}...")
+            titles = title_generator.generate_titles(clip, transcript)
+            clip['suggested_titles'] = titles
+        
         with open(clips_json_path, 'w', encoding='utf-8') as f:
             json.dump(clips, f, ensure_ascii=False, indent=2)
-        print(f"\nClip selections saved to: {clips_json_path}")
+        print(f"\nClip selections with titles saved to: {clips_json_path}")
     
     # Exit if only analyzing
     if args.analyze_only:
@@ -1134,6 +1394,12 @@ def main():
         print(f"\nClip {i}:")
         print(f"  Time: {clip['start']:.1f}s - {clip['end']:.1f}s ({duration:.1f}s)")
         print(f"  Reason: {clip['reason']}")
+        
+        # Display suggested titles if available
+        if 'suggested_titles' in clip:
+            titles = clip['suggested_titles']
+            print(f"  Arabic Title: {titles.get('arabic', 'N/A')}")
+            print(f"  English Title: {titles.get('english', 'N/A')}")
     
     # Step 3: Extract clips
     if not args.extract_only:

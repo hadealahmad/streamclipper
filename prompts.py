@@ -83,3 +83,70 @@ IMPORTANT:
 - Focus on the meaning and content quality, not the language formality
 - Write ALL reasons in Arabic (العربية) - do not use English for the reason field
 - Return ONLY the JSON array, no other text"""
+
+# Timestamp generation prompt
+def get_timestamp_generation_prompt(transcript_text: str, video_duration: float) -> str:
+    """Generate prompt for creating video section timestamps"""
+    return f"""You are analyzing an Arabic video transcript to create logical section timestamps with Arabic titles.
+
+Video duration: {video_duration:.1f} seconds
+Transcript:
+{transcript_text}
+
+Create up to 10 logical sections that represent natural content breaks in the video. Each section should:
+- Cover a complete topic or theme
+- Have a clear beginning and end
+- Be substantial enough to be meaningful
+- Represent natural pauses or topic changes in the content
+
+Respond with ONLY a JSON array in this exact format:
+[
+  {{
+    "section": 1,
+    "start_time": 0.0,
+    "end_time": 120.5,
+    "arabic_title": "المقدمة والتعريف بالموضوع"
+  }},
+  {{
+    "section": 2,
+    "start_time": 120.5,
+    "end_time": 245.8,
+    "arabic_title": "المناقشة الرئيسية"
+  }}
+]
+
+IMPORTANT:
+- Maximum 10 sections
+- Start time of first section must be 0.0
+- End time of last section must be {video_duration:.1f}
+- Each section must connect to the next (no gaps)
+- Arabic titles should be descriptive and in informal style (عامية)
+- Titles should reflect the actual content of each section
+- Return ONLY the JSON array, no other text"""
+
+# Clip title generation prompt
+def get_clip_title_generation_prompt(clip_content: str, clip_reason: str, clip_duration: float) -> str:
+    """Generate prompt for creating clip titles"""
+    return f"""You are creating suggested titles for a video clip.
+
+Clip content: {clip_content}
+Clip reason: {clip_reason}
+Clip duration: {clip_duration:.1f} seconds
+
+Create engaging titles that accurately represent the clip content:
+
+1. Arabic title: Should be in informal Arabic (عامية) style, engaging and descriptive
+2. English title: Should be clear, SEO-friendly, and descriptive
+
+Respond with ONLY a JSON object in this exact format:
+{{
+  "arabic": "العنوان العربي المقترح",
+  "english": "Suggested English Title"
+}}
+
+IMPORTANT:
+- Arabic title should match the informal style of the content
+- English title should be clear and professional
+- Both titles should accurately represent the clip content
+- Keep titles concise but descriptive
+- Return ONLY the JSON object, no other text"""

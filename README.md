@@ -20,6 +20,13 @@ AI-powered tool for automatically extracting interesting clips from Arabic video
 sudo pacman -S ffmpeg  # Arch
 sudo apt install ffmpeg  # Ubuntu/Debian
 
+# Create virtual environment
+python -m venv venv
+
+source venv/bin/activate
+or
+source venv/bin/activate.fish
+
 # Install PyTorch (AMD GPU)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.4
 
