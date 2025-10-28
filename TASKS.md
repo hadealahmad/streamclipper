@@ -22,11 +22,12 @@
 ## Remaining Refactoring Tasks
 
 - [x] Update import statements in extracted modules
+- [x] Update clipper.py to use new modules instead of duplicate definitions
+- [x] Update all `__init__.py` exports for cleaner imports
+- [x] Fix import errors and test basic functionality
+- [ ] Test all functionality works (transcription, LLM, extraction) - in progress
 - [ ] Fix circular dependencies if any (test needed)
 - [ ] Extract CLI module (parser, commands, workflows) - Major task, see REFACTOR_STATUS.md
-- [ ] Update clipper.py to use new modules instead of duplicate definitions
-- [ ] Update all `__init__.py` exports for cleaner imports
-- [ ] Test all functionality works after refactoring
 - [ ] Update documentation to reflect new structure
 
 See `REFACTOR_STATUS.md` for detailed status.
