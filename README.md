@@ -2,6 +2,26 @@
 
 AI-powered tool for automatically extracting interesting clips from Arabic videos. Uses OpenAI Whisper for transcription and Gemini for intelligent clip selection.
 
+## Project Structure
+
+This project uses a feature-based architecture with clear separation of concerns:
+
+```
+streamclipper/
+├── clipper.py              # Main entry point
+├── prompts.py              # LLM prompts configuration
+├── src/                    # Feature modules
+│   ├── config.py           # Configuration management
+│   ├── utils/              # GPU detection, dependencies, file I/O
+│   ├── transcription/      # Transcription backends (Whisper, Gemini)
+│   ├── analysis/           # LLM-based analysis tools
+│   │   └── llm/           # LLM providers (Gemini, Ollama, OpenRouter)
+│   └── extraction/         # Video clipping and audio conversion
+└── clips/                  # Output directory
+```
+
+See `REFACTOR_STATUS.md` for details on the refactoring.
+
 ## Features
 
 - **GPU Acceleration**: AMD (ROCm), NVIDIA (CUDA), or CPU
