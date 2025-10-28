@@ -1,4 +1,39 @@
-# Video Timestamps and Clip Titles Implementation
+# Stream Clipper Project Tasks
+
+## Current Refactoring: Feature-Based Architecture
+
+### Refactoring Goals
+- Split 1501-line monolithic `clipper.py` into manageable feature modules
+- Organize by feature (transcription/, analysis/, extraction/, etc.)
+- Separate API keys for Gemini LLM vs Gemini transcription
+- Extract CLI logic to separate module with command pattern
+- Maintain backwards compatibility with existing usage
+
+## Completed Refactoring Tasks
+
+- [x] Create directory structure (src/, transcription/, analysis/, extraction/, utils/, cli/)
+- [x] Extract configuration module with separate Gemini API keys
+- [x] Extract utils module (gpu.py, dependencies.py, file_io.py)
+- [x] Extract extraction module (audio_converter.py, video_clipper.py)
+- [x] Extract transcription module with base interface and implementations
+- [x] Extract analysis/llm module with base interface and providers
+- [x] Extract analysis tools (clip_selector, timestamp_generator, title_generator)
+
+## Remaining Refactoring Tasks
+
+- [ ] Update import statements in extracted modules to use proper relative imports
+- [ ] Fix circular dependencies if any
+- [ ] Extract CLI module (parser, commands, workflows)
+- [ ] Update clipper.py to minimal entry point that delegates to new modules
+- [ ] Update all `__init__.py` exports
+- [ ] Test all functionality works after refactoring
+- [ ] Update documentation to reflect new structure
+
+---
+
+## Previous Features
+
+### Video Timestamps and Clip Titles Implementation
 
 Implementation of two new features for the video clipper:
 1. Video section timestamps with Arabic titles (max 10 sections)
