@@ -27,6 +27,34 @@ Implementation of two new features for the video clipper:
 - [ ] Add validation for timestamp limits
 - [ ] Add error handling for title generation
 
+## Recently Completed Features
+
+### Open Router API Support ✅
+
+Added support for Open Router as an LLM provider option, allowing users to access multiple AI models through a single API.
+
+**Implementation:**
+- Created `OpenRouterLLM` class for API integration
+- Added environment variables: `OPEN_ROUTER_API_KEY` and `OPEN_ROUTER_MODEL`
+- Added command-line arguments: `--openrouter-api-key` and `--openrouter-model`
+- Updated LLM initialization logic to support Open Router
+- Updated documentation with Open Router usage examples
+
+**Usage:**
+```bash
+# Set in .env file
+OPEN_ROUTER_API_KEY=your_key
+OPEN_ROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
+
+# Use with clipper
+python clipper.py video.mp4 --llm-provider openrouter
+```
+
+**Supported Models:**
+- All models available on Open Router (Claude, GPT-4, Gemini, Mistral, etc.)
+- Default: `meta-llama/llama-3.3-70b-instruct:free`
+- See available models: https://openrouter.ai/models
+
 ## Implementation Summary
 
 ### ✅ Completed Features

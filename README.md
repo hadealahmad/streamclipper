@@ -80,8 +80,10 @@ python clipper.py video.mp4 --no-gpu
 | `--interactive-gpu` | Interactive GPU selection | False |
 | `--no-gpu` | Force CPU usage | False |
 | `--llm-provider` | LLM provider for clip selection | `gemini` |
-| `--llm` | Ollama model name | `llama3.2` |
+| `--llm` | Ollama/OpenRouter model name | `llama3.2` |
 | `--gemini-api-key` | Gemini API key | From `.env` |
+| `--openrouter-api-key` | Open Router API key | From `.env` |
+| `--openrouter-model` | Open Router model name | From `.env` |
 | `--min-duration` | Minimum clip duration (seconds) | `300` |
 | `--max-duration` | Maximum clip duration (seconds) | `900` |
 | `--long-form` | Long-form mode (10-30 min) | False |
@@ -184,6 +186,16 @@ python clipper.py video.mp4 --cleanup-audio    # Remove MP3 files
 GEMINI_API_KEY=your_api_key
 ```
 
+**Open Router (cloud):**
+```bash
+# Add to .env
+OPEN_ROUTER_API_KEY=your_api_key
+OPEN_ROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
+
+# Use
+python clipper.py video.mp4 --llm-provider openrouter
+```
+
 **Ollama (local):**
 ```bash
 # Install Ollama
@@ -257,7 +269,7 @@ DEFAULT_CONVERT_TO_MP3=True
 # LLM Settings (for clip selection)
 # ============================================================
 
-# LLM provider: "gemini" (cloud AI) or "ollama" (local)
+# LLM provider: "gemini" (cloud AI), "ollama" (local), or "openrouter" (cloud AI router)
 # Default: gemini
 DEFAULT_LLM_PROVIDER=gemini
 
@@ -270,6 +282,16 @@ DEFAULT_GEMINI_MODEL=gemini-2.5-flash
 # Examples: "llama3.2", "llama3.2:70b", "mistral"
 # Default: llama3.2
 DEFAULT_OLLAMA_MODEL=llama3.2
+
+# Open Router API key (required when using openrouter provider)
+# Get your key from: https://openrouter.ai/
+OPEN_ROUTER_API_KEY=
+
+# Open Router model to use for clip selection
+# Examples: "meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-4", "google/gemini-pro", "mistralai/mistral-large"
+# Default: meta-llama/llama-3.3-70b-instruct:free
+# See available models: https://openrouter.ai/models
+OPEN_ROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
 # ============================================================
 # Clip Settings
@@ -334,8 +356,11 @@ python clipper.py video.mp4 --no-gpu
 
 **API key error:**
 ```bash
-# Create .env file
+# Create .env file for Gemini
 echo "GEMINI_API_KEY=your_key" > .env
+
+# Or for Open Router
+echo "OPEN_ROUTER_API_KEY=your_key" >> .env
 
 # Or use local processing
 python clipper.py video.mp4 --llm-provider ollama

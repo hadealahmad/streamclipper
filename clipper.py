@@ -68,6 +68,7 @@ DEFAULT_CONVERT_TO_MP3 = get_bool_env("DEFAULT_CONVERT_TO_MP3", True)
 DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "gemini")
 DEFAULT_GEMINI_MODEL = os.getenv("DEFAULT_GEMINI_MODEL", "gemini-2.5-flash")
 DEFAULT_OLLAMA_MODEL = os.getenv("DEFAULT_OLLAMA_MODEL", "llama3.2")
+DEFAULT_OPEN_ROUTER_MODEL = os.getenv("DEFAULT_OPEN_ROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
 # Default clip settings
 DEFAULT_MIN_DURATION = get_int_env("DEFAULT_MIN_DURATION", 300)  # 5 minutes in seconds
@@ -79,6 +80,8 @@ DEFAULT_TRANSCRIPT_FORMAT = os.getenv("DEFAULT_TRANSCRIPT_FORMAT", "csv")  # Onl
 
 # Environment variable names for API keys and legacy settings
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+OPEN_ROUTER_API_KEY_ENV = "OPEN_ROUTER_API_KEY"
+OPEN_ROUTER_MODEL_ENV = "OPEN_ROUTER_MODEL"
 GPU_DEVICE_ENV = "VIDEO_CLIPPER_GPU"  # Legacy: Optional GPU device setting
 
 
@@ -735,6 +738,61 @@ class OllamaLLM:
             return ""
 
 
+class OpenRouterLLM:
+    """Interface with Open Router API for LLM access"""
+    
+    def __init__(self, api_key: str, model_name: str = "meta-llama/llama-3.3-70b-instruct:free"):
+        """
+        Initialize Open Router client
+        Args:
+            api_key: Open Router API key
+            model_name: Name of the model to use (e.g., "meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-4")
+        """
+        self.model_name = model_name
+        self.api_key = api_key
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        print(f"✓ Open Router API initialized ({model_name})")
+    
+    def generate(self, prompt: str) -> str:
+        """Generate response from LLM"""
+        import requests
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4000
+        }
+        
+        try:
+            response = requests.post(self.api_url, json=payload, headers=headers, timeout=180)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            # Extract the message content from the response
+            if "choices" in result and len(result["choices"]) > 0:
+                return result["choices"][0]["message"]["content"]
+            else:
+                print(f"Error: Unexpected response format from Open Router")
+                return ""
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling Open Router API: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response: {e.response.text}")
+            return ""
+
+
 class ClipSelector:
     """Use LLM to select interesting clips from transcript"""
     
@@ -742,7 +800,7 @@ class ClipSelector:
         """
         Initialize clip selector
         Args:
-            llm: LLM instance (GeminiLLM or OllamaLLM)
+            llm: LLM instance (GeminiLLM, OllamaLLM, or OpenRouterLLM)
         """
         self.llm = llm
     
@@ -812,7 +870,7 @@ class TimestampGenerator:
         """
         Initialize timestamp generator
         Args:
-            llm: LLM instance (GeminiLLM or OllamaLLM)
+            llm: LLM instance (GeminiLLM, OllamaLLM, or OpenRouterLLM)
         """
         self.llm = llm
     
@@ -899,7 +957,7 @@ class ClipTitleGenerator:
         """
         Initialize clip title generator
         Args:
-            llm: LLM instance (GeminiLLM or OllamaLLM)
+            llm: LLM instance (GeminiLLM, OllamaLLM, or OpenRouterLLM)
         """
         self.llm = llm
     
@@ -1089,10 +1147,12 @@ def main():
                        help="Interactive GPU selection for multi-GPU systems")
     parser.add_argument("--no-gpu", action="store_true", help="Force CPU usage")
     parser.add_argument("--llm-provider", default=DEFAULT_LLM_PROVIDER, 
-                       choices=["gemini", "ollama"],
+                       choices=["gemini", "ollama", "openrouter"],
                        help="LLM provider for clip selection")
-    parser.add_argument("--llm", default=DEFAULT_OLLAMA_MODEL, help="Ollama model name")
+    parser.add_argument("--llm", default=DEFAULT_OLLAMA_MODEL, help="Ollama/OpenRouter model name")
     parser.add_argument("--gemini-api-key", default=None, help="Google Gemini API key")
+    parser.add_argument("--openrouter-api-key", default=None, help="Open Router API key")
+    parser.add_argument("--openrouter-model", default=None, help="Open Router model (e.g., 'meta-llama/llama-3.3-70b-instruct:free')")
     parser.add_argument("--min-duration", type=float, default=DEFAULT_MIN_DURATION, 
                        help="Minimum clip duration (seconds)")
     parser.add_argument("--max-duration", type=float, default=DEFAULT_MAX_DURATION, 
@@ -1165,7 +1225,7 @@ def main():
         args.skip_analysis = True
         args.extract_only = True
     
-    # Load API key
+    # Load API keys
     if not args.gemini_api_key:
         args.gemini_api_key = os.getenv(GEMINI_API_KEY_ENV)
         if not args.gemini_api_key:
@@ -1173,6 +1233,20 @@ def main():
                 print("\n❌ Gemini API key required")
                 print("Set GEMINI_API_KEY in .env file or use --gemini-api-key")
                 sys.exit(1)
+    
+    if not args.openrouter_api_key:
+        args.openrouter_api_key = os.getenv(OPEN_ROUTER_API_KEY_ENV)
+    
+    # Set Open Router model
+    if args.llm_provider == "openrouter":
+        if not args.openrouter_api_key:
+            print("\n❌ Open Router API key required")
+            print("Set OPEN_ROUTER_API_KEY in .env file or use --openrouter-api-key")
+            sys.exit(1)
+        
+        if not args.openrouter_model:
+            args.openrouter_model = os.getenv(OPEN_ROUTER_MODEL_ENV, DEFAULT_OPEN_ROUTER_MODEL)
+            print(f"Using Open Router model: {args.openrouter_model}")
     
     # GPU settings
     use_gpu = DEFAULT_USE_GPU and not args.no_gpu
@@ -1297,6 +1371,8 @@ def main():
             # Initialize LLM for timestamp generation
             if args.llm_provider == "gemini":
                 llm = GeminiLLM(api_key=args.gemini_api_key, model_name=DEFAULT_GEMINI_MODEL)
+            elif args.llm_provider == "openrouter":
+                llm = OpenRouterLLM(api_key=args.openrouter_api_key, model_name=args.openrouter_model)
             else:
                 llm = OllamaLLM(model_name=args.llm)
             
@@ -1321,6 +1397,8 @@ def main():
         # Initialize LLM for timestamp generation
         if args.llm_provider == "gemini":
             llm = GeminiLLM(api_key=args.gemini_api_key, model_name=DEFAULT_GEMINI_MODEL)
+        elif args.llm_provider == "openrouter":
+            llm = OpenRouterLLM(api_key=args.openrouter_api_key, model_name=args.openrouter_model)
         else:
             llm = OllamaLLM(model_name=args.llm)
         
@@ -1359,6 +1437,8 @@ def main():
     else:
         if args.llm_provider == "gemini":
             llm = GeminiLLM(api_key=args.gemini_api_key, model_name=DEFAULT_GEMINI_MODEL)
+        elif args.llm_provider == "openrouter":
+            llm = OpenRouterLLM(api_key=args.openrouter_api_key, model_name=args.openrouter_model)
         else:
             llm = OllamaLLM(model_name=args.llm)
         
