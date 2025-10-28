@@ -5,9 +5,13 @@ Gemini transcription backend
 import json
 import sys
 import subprocess
+import os
 from typing import List, Dict
 
 from tqdm import tqdm
+
+# Add project root to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from prompts import GEMINI_TRANSCRIPTION_PROMPT
 from src.extraction.audio_converter import AudioConverter
