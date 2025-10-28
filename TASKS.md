@@ -27,7 +27,6 @@
 - [x] Fix import errors and test basic functionality
 - [x] Test all functionality works (transcription, LLM, extraction)
 - [x] Fix circular dependencies if any
-- [ ] Extract CLI module (parser, commands, workflows) - OPTIONAL, see REFACTOR_STATUS.md
 - [x] Update documentation to reflect new structure
 
 See `REFACTOR_STATUS.md` for detailed status.

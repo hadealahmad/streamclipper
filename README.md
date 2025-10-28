@@ -8,7 +8,7 @@ This project uses a feature-based architecture with clear separation of concerns
 
 ```
 streamclipper/
-├── clipper.py              # Main entry point
+├── clipper.py              # Main entry point (CLI and workflow)
 ├── prompts.py              # LLM prompts configuration
 ├── src/                    # Feature modules
 │   ├── config.py           # Configuration management
