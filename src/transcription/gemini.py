@@ -6,7 +6,7 @@ import json
 import sys
 import subprocess
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from tqdm import tqdm
 

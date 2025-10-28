@@ -5,7 +5,7 @@ OpenAI Whisper transcription backend
 import json
 import sys
 import subprocess
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from tqdm import tqdm
 
