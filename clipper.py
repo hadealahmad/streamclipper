@@ -66,6 +66,48 @@ from src.analysis.title_generator import ClipTitleGenerator
 # All classes are now imported from src/ modules above
 # ============================================================
 
+def build_dependency_context(args) -> dict:
+    """
+    Analyze arguments and determine which dependencies are needed.
+    Returns a context dict for dependency checking.
+    """
+    ctx = {
+        'needs_ffmpeg': False,
+        'required_modules': ['requests', 'tqdm'],
+        'needs_whisper': False,
+        'needs_gemini': False,
+        'needs_ollama': False,
+    }
+    
+    # Always need ffmpeg/ffprobe for any video operation (convert, transcribe, extract)
+    # Unless we're doing analyze-only with existing transcript
+    if not (args.analyze_only and args.skip_transcribe):
+        ctx['needs_ffmpeg'] = True
+    
+    # Check transcription backend
+    backend = args.backend
+    if backend in ['openai-whisper', 'faster-whisper']:
+        ctx['needs_whisper'] = True
+    elif backend == 'gemini':
+        ctx['needs_gemini'] = True
+    
+    # Check LLM provider if doing analysis
+    if not args.skip_analysis:
+        if args.llm_provider == 'ollama':
+            ctx['needs_ollama'] = True
+        elif args.llm_provider == 'gemini' or backend == 'gemini':
+            ctx['needs_gemini'] = True
+    
+    # For timestamp creation, LLM is needed
+    if not args.skip_timestamps and args.analyze_only:
+        if args.llm_provider == 'ollama':
+            ctx['needs_ollama'] = True
+        elif args.llm_provider == 'gemini':
+            ctx['needs_gemini'] = True
+    
+    return ctx
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Automatically extract clips from videos using AI (AMD GPU optimized)"
@@ -192,8 +234,11 @@ def main():
     
     convert_to_mp3 = DEFAULT_CONVERT_TO_MP3 and not args.no_mp3
     
-    # Check dependencies
-    DependencyChecker.check_and_install_dependencies()
+    # Build dependency context and check required dependencies
+    ctx = build_dependency_context(args)
+    if not DependencyChecker.check_and_install_specific(ctx):
+        print("\nPlease install missing dependencies before continuing.")
+        sys.exit(1)
     
     # Validate video
     if not os.path.exists(args.video):
