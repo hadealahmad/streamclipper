@@ -6,12 +6,11 @@ import json
 import re
 from typing import List, Dict
 
-from prompts import (
-
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
+from prompts import (
     get_clip_selection_prompt,
     get_timestamp_generation_prompt,
     get_clip_title_generation_prompt
