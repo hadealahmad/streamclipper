@@ -26,39 +26,85 @@ See `REFACTOR_STATUS.md` for details on the refactoring.
 
 - **GPU Acceleration**: AMD (ROCm), NVIDIA (CUDA), or CPU
 - **Multi-GPU Support**: Interactive GPU selection
-- **OpenAI Whisper**: High-quality Arabic transcription
-- **Gemini AI**: Intelligent clip selection
-- **Smart Defaults**: 5-15 minute clips
-- **Flexible Configuration**: Multiple backends
+- **Multiple Transcription Backends**: OpenAI Whisper, Faster-Whisper, or cloud-based Gemini
+- **Multiple LLM Providers**: Gemini, Ollama, or OpenRouter
+- **Context-Aware Dependency Checking**: Only checks dependencies actually needed for your command
+- **Intelligent Clip Selection**: AI-powered analysis of transcripts
+- **Video Section Timestamps**: Auto-generate chapter timestamps with Arabic titles
+- **Smart Defaults**: 5-15 minute clips (configurable)
+- **Flexible Configuration**: Environment variables and CLI flags
+- **Modular Architecture**: Feature-based code organization for maintainability
 
 ## Quick Start
 
 ### 1. Install Dependencies
 
+**Note**: The script now uses context-aware dependency checking. It will automatically check for and install only the dependencies you actually need based on your command options.
+
+#### Minimal Setup (Cloud-based transcription with Gemini)
+
 ```bash
-# Install FFmpeg
+# Install FFmpeg (always required for video processing)
 sudo pacman -S ffmpeg  # Arch
 sudo apt install ffmpeg  # Ubuntu/Debian
 
 # Create virtual environment
 python -m venv venv
-
 source venv/bin/activate
-or
-source venv/bin/activate.fish
 
-# Install PyTorch (AMD GPU)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.4
-
-# Install dependencies
+# Install basic dependencies (no heavy ML libraries needed!)
 pip install -r requirements.txt
 ```
+
+#### Full Setup (Local Whisper transcription)
+
+```bash
+# Install FFmpeg (always required)
+sudo pacman -S ffmpeg  # Arch
+sudo apt install ffmpeg  # Ubuntu/Debian
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install PyTorch with GPU support
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.4  # AMD
+# OR
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121  # NVIDIA
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+The script will check and report missing dependencies when you run it, based on your selected backend.
 
 ### 2. Configure
 
 ```bash
 cp env.example .env
-# Edit .env and add: GEMINI_API_KEY=your_key_here
+# Edit .env and add your API keys and preferences
+```
+
+Example `.env` file:
+```env
+# API Keys (use separate keys for transcription and LLM if desired)
+GEMINI_API_KEY=your_gemini_api_key_here
+# GEMINI_TRANSCRIPTION_API_KEY=optional_separate_key_for_transcription
+# GEMINI_LLM_API_KEY=optional_separate_key_for_llm
+OPEN_ROUTER_API_KEY=optional_openrouter_key
+
+# Transcription Backend
+DEFAULT_TRANSCRIPTION_BACKEND=gemini  # or openai-whisper or faster-whisper
+DEFAULT_WHISPER_MODEL=large-v3
+DEFAULT_USE_GPU=True
+
+# LLM Provider
+DEFAULT_LLM_PROVIDER=gemini  # or ollama or openrouter
+DEFAULT_GEMINI_MODEL=gemini-2.5-flash
+
+# Clip Settings
+DEFAULT_MIN_DURATION=300  # 5 minutes
+DEFAULT_MAX_DURATION=900  # 15 minutes
 ```
 
 ### 3. Run
@@ -116,6 +162,23 @@ python clipper.py video.mp4 --no-gpu
 | `--extract-only` | Only extract clips from existing analysis | False |
 | `--cleanup-audio` | Clean up MP3 files after processing | False |
 | `--force-redo` | Force redo all steps even if files exist | False |
+
+### Context-Aware Dependency Checking
+
+The script now intelligently checks only the dependencies you actually need based on your command:
+
+**Examples:**
+- **Cloud transcription** (`--backend gemini`): Only checks for ffmpeg, ffprobe, and google-genai
+- **Local Whisper** (`--backend openai-whisper`): Checks for ffmpeg, ffprobe, Whisper, and PyTorch
+- **Analyze-only** (`--analyze-only`): Skips ffmpeg/whisper checks, only checks LLM provider
+- **Convert-only** (`--convert-only`): Only checks for ffmpeg and ffprobe
+
+This means you can:
+- Use cloud services without installing heavy local dependencies
+- Get clearer, more relevant error messages
+- Start faster with fewer unnecessary checks
+
+See `CONTEXT_AWARE_DEPS.md` for details.
 
 ### GPU Configuration
 

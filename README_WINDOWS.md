@@ -22,6 +22,8 @@ AI-powered tool for automatically extracting interesting clips from Arabic video
 python --version
 ```
 
+**Note**: The script uses context-aware dependency checking. You only need to install dependencies for the features you plan to use. See the Quick Setup options below.
+
 ### Step 2: Install FFmpeg
 
 FFmpeg is required for video/audio processing. Choose one method:
@@ -101,15 +103,27 @@ If it prints `True`, GPU support is working.
 
 ### Step 5: Install Project Dependencies
 
+**Choose your setup:**
+
+#### Option A: Cloud-Based (Recommended for simplicity)
+Uses Gemini for both transcription and LLM - no heavy ML libraries needed!
+
 ```cmd
 pip install -r requirements.txt
 ```
 
-This installs:
-- openai-whisper (transcription)
-- google-genai (Gemini API)
-- python-dotenv (configuration)
-- Other dependencies
+This installs only lightweight dependencies. The script will check for missing packages when you run it.
+
+#### Option B: Local Whisper (Better quality, requires GPU)
+```cmd
+# Install PyTorch with CUDA
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+**Note**: You can skip installing Whisper/PyTorch if you use `--backend gemini` for cloud transcription!
 
 ### Step 6: Configuration
 
@@ -376,19 +390,25 @@ python clipper.py video.mp4 --analyze-only
 ## FAQ
 
 **Q: Do I need a GPU?**  
-A: No, but it's 10-20x faster. CPU mode works fine.
+A: Not if using Gemini for cloud transcription! Only needed for local Whisper transcription.
 
 **Q: Which GPU should I use?**  
-A: Any modern NVIDIA GPU with 4GB+ VRAM. CUDA 12.1 supported.
+A: Any modern NVIDIA GPU with 4GB+ VRAM. CUDA 12.1 supported. Or just use Gemini backend!
 
 **Q: How accurate is Arabic transcription?**  
-A: Very accurate with `medium` or `large-v3` models.
+A: Very accurate with `medium` or `large-v3` models. Gemini cloud transcription is also excellent.
+
+**Q: Do I need to install PyTorch/Whisper?**  
+A: Only if using local Whisper (`--backend openai-whisper`). Use `--backend gemini` to skip installation!
 
 **Q: How much disk space needed?**  
-A: 500MB for models, plus ~200MB per hour of video for clips.
+A: Depends on backend:
+- Gemini cloud: ~100MB (just dependencies)
+- Local Whisper: 500MB+ (models download automatically)
+- Plus ~200MB per hour of video for clips.
 
 **Q: Can I use AMD GPU?**  
-A: No, ROCm (AMD's CUDA) is Linux-only. Use NVIDIA or CPU mode.
+A: No, ROCm (AMD's CUDA) is Linux-only. Use NVIDIA GPU or Gemini cloud backend.
 
 ## License
 
@@ -400,4 +420,5 @@ MIT License
 - [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
 - [OpenAI Whisper](https://github.com/openai/whisper)
 - [Google Gemini API](https://ai.google.dev/)
+
 
