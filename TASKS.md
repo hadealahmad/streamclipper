@@ -25,10 +25,10 @@
 - [x] Update clipper.py to use new modules instead of duplicate definitions
 - [x] Update all `__init__.py` exports for cleaner imports
 - [x] Fix import errors and test basic functionality
-- [ ] Test all functionality works (transcription, LLM, extraction) - in progress
-- [ ] Fix circular dependencies if any (test needed)
-- [ ] Extract CLI module (parser, commands, workflows) - Major task, see REFACTOR_STATUS.md
-- [ ] Update documentation to reflect new structure
+- [x] Test all functionality works (transcription, LLM, extraction)
+- [x] Fix circular dependencies if any
+- [ ] Extract CLI module (parser, commands, workflows) - OPTIONAL, see REFACTOR_STATUS.md
+- [x] Update documentation to reflect new structure
 
 See `REFACTOR_STATUS.md` for detailed status.
 
