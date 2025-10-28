@@ -64,11 +64,11 @@ DEFAULT_MAX_DURATION = get_int_env("DEFAULT_MAX_DURATION", 900)  # 15 minutes in
 DEFAULT_OUTPUT_DIR = os.getenv("DEFAULT_OUTPUT_DIR", "clips")
 DEFAULT_TRANSCRIPT_FORMAT = os.getenv("DEFAULT_TRANSCRIPT_FORMAT", "csv")  # Only CSV format supported
 
-# Environment variable names for API keys and legacy settings
+# Environment variable names for API keys and settings
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 OPEN_ROUTER_API_KEY_ENV = "OPEN_ROUTER_API_KEY"
 OPEN_ROUTER_MODEL_ENV = "OPEN_ROUTER_MODEL"
-GPU_DEVICE_ENV = "VIDEO_CLIPPER_GPU"  # Legacy: Optional GPU device setting
+GPU_DEVICE_ENV = "VIDEO_CLIPPER_GPU"  # Environment variable to specify GPU device ID
 
 
 def get_gemini_transcription_api_key() -> Optional[str]:
