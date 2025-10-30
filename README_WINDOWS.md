@@ -117,7 +117,8 @@ This installs only lightweight dependencies. The script will check for missing p
 #### Option B: Local Whisper (Better quality, requires GPU)
 ```cmd
 # Install PyTorch with CUDA
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+
 
 # Install all dependencies
 pip install -r requirements.txt
