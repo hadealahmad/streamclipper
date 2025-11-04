@@ -48,7 +48,7 @@ from src.config import (
 
 from src.utils.gpu import GPUDetector
 from src.utils.dependencies import DependencyChecker
-from src.utils.file_io import save_transcript, save_timestamps_youtube_format
+from src.utils.file_io import save_transcript, save_timestamps_youtube_format, csv_to_srt, create_clip_srt
 from src.extraction.audio_converter import AudioConverter
 from src.extraction.video_clipper import VideoClipper
 from src.transcription.gemini import GeminiTranscriber
@@ -295,6 +295,11 @@ def main():
                     'end': float(row['end_time']),
                     'text': row['text']
                 })
+        
+        # Generate SRT subtitle file if it doesn't exist or force_redo is set
+        srt_path = output_dir / f"{video_name}_transcript.srt"
+        if not srt_path.exists() or args.force_redo:
+            csv_to_srt(str(transcript_path), str(srt_path))
     else:
         # Check if we should use existing audio
         use_existing_audio = audio_path.exists() and not args.force_redo
@@ -326,6 +331,11 @@ def main():
             transcript = transcriber.transcribe(video_path)
         
         save_transcript(transcript, str(transcript_path))
+        
+        # Generate SRT subtitle file for full transcript
+        srt_path = output_dir / f"{video_name}_transcript.srt"
+        if not srt_path.exists() or args.force_redo:
+            csv_to_srt(str(transcript_path), str(srt_path))
         
         # Clean up audio if requested
         if args.cleanup_audio and audio_path.exists():
@@ -472,6 +482,21 @@ def main():
     
     VideoClipper.create_clips(video_path, clips, str(output_dir))
     print(f"\n✓ All clips saved to: {output_dir}")
+    
+    # Generate SRT subtitle files for each clip
+    print("\nGenerating SRT subtitle files for clips...")
+    for i, clip in enumerate(clips, 1):
+        clip_srt_path = output_dir / f"{video_name}_clip_{i:02d}.srt"
+        # Only generate if it doesn't exist or force_redo is set
+        if not clip_srt_path.exists() or args.force_redo:
+            create_clip_srt(
+                str(transcript_path),
+                clip['start'],
+                clip['end'],
+                str(clip_srt_path)
+            )
+        else:
+            print(f"Clip SRT already exists, skipping: {clip_srt_path.name}")
     
     # Final cleanup if requested
     if args.cleanup_audio and audio_path.exists():
