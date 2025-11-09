@@ -371,10 +371,10 @@ DEFAULT_OLLAMA_MODEL=llama3.2
 OPEN_ROUTER_API_KEY=
 
 # Open Router model to use for clip selection
-# Examples: "meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-4", "google/gemini-pro", "mistralai/mistral-large"
-# Default: meta-llama/llama-3.3-70b-instruct:free
+# Examples: "openai/gpt-oss-20b:free", "openai/gpt-4", "google/gemini-pro", "mistralai/mistral-large"
+# Default: openai/gpt-oss-20b:free
 # See available models: https://openrouter.ai/models
-OPEN_ROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
+OPEN_ROUTER_MODEL=openai/gpt-oss-20b:free
 
 # ============================================================
 # Clip Settings
